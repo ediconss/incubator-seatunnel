@@ -34,11 +34,24 @@ import org.apache.kafka.connect.source.SourceRecord;
 
 import io.debezium.DebeziumException;
 import io.debezium.connector.base.ChangeEventQueue;
+import io.debezium.connector.postgresql.PostgresChangeEventSourceCoordinator;
+import io.debezium.connector.postgresql.PostgresChangeEventSourceFactory;
+import io.debezium.connector.postgresql.PostgresConnector;
+import io.debezium.connector.postgresql.PostgresConnectorConfig;
+import io.debezium.connector.postgresql.PostgresErrorHandler;
+import io.debezium.connector.postgresql.PostgresEventMetadataProvider;
+import io.debezium.connector.postgresql.PostgresOffsetContext;
+import io.debezium.connector.postgresql.PostgresSchema;
+import io.debezium.connector.postgresql.PostgresTaskContext;
+import io.debezium.connector.postgresql.PostgresTopicSelector;
+import io.debezium.connector.postgresql.PostgresValueConverter;
+import io.debezium.connector.postgresql.TypeRegistry;
 import io.debezium.connector.postgresql.connection.PostgresConnection;
 import io.debezium.connector.postgresql.connection.ReplicationConnection;
 import io.debezium.connector.postgresql.spi.SlotCreationResult;
 import io.debezium.connector.postgresql.spi.SlotState;
 import io.debezium.connector.postgresql.spi.Snapshotter;
+import io.debezium.pipeline.ChangeEventSourceCoordinator;
 import io.debezium.pipeline.DataChangeEvent;
 import io.debezium.pipeline.ErrorHandler;
 import io.debezium.pipeline.metrics.DefaultChangeEventSourceMetricsFactory;
@@ -105,7 +118,7 @@ public class PostgresSourceFetchTaskContext extends JdbcSourceFetchTaskContext {
         // initial stateful objects
         final PostgresConnectorConfig connectorConfig = getDbzConnectorConfig();
         this.snapshotter = connectorConfig.getSnapshotter();
-
+        final Clock clock = Clock.system();
         this.topicSelector = PostgresTopicSelector.create(connectorConfig);
 
         final PostgresConnection.PostgresValueConverterBuilder valueConverterBuilder =
@@ -113,13 +126,20 @@ public class PostgresSourceFetchTaskContext extends JdbcSourceFetchTaskContext {
                         PostgresValueConverter.of(
                                 connectorConfig, dataConnection.getDatabaseCharset(), typeRegistry);
         final TypeRegistry typeRegistry = dataConnection.getTypeRegistry();
+
         this.databaseSchema =
                 new PostgresSchema(
                         connectorConfig,
                         typeRegistry,
                         topicSelector,
                         valueConverterBuilder.build(typeRegistry));
+        try {
+            this.databaseSchema.refresh(dataConnection, true);
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
         this.taskContext = new PostgresTaskContext(connectorConfig, databaseSchema, topicSelector);
+
         this.offsetContext =
                 loadStartingOffsetState(
                         new PostgresOffsetContext.Loader(connectorConfig), sourceSplitBase);
@@ -131,6 +151,7 @@ public class PostgresSourceFetchTaskContext extends JdbcSourceFetchTaskContext {
 
         LoggingContext.PreviousContext previousContext =
                 taskContext.configureLoggingContext(CONTEXT_NAME);
+
         try {
             // Print out the server information
             SlotState slotInfo = null;

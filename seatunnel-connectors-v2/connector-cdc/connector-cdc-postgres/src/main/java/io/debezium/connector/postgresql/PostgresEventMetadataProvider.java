@@ -80,6 +80,10 @@ public class PostgresEventMetadataProvider implements EventMetadataProvider {
         if (source == null) {
             return null;
         }
-        return Long.toString(sourceInfo.getInt64(SourceInfo.TXID_KEY));
+        Long txId = sourceInfo.getInt64(SourceInfo.TXID_KEY);
+        if (txId == null) {
+            return null;
+        }
+        return Long.toString(txId);
     }
 }
