@@ -15,22 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.psql;
+package org.apache.seatunnel.connectors.seatunnel.cdc.postgres.source;
 
-import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.JdbcDialect;
-import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.JdbcDialectFactory;
+import org.apache.seatunnel.connectors.cdc.base.config.JdbcSourceConfig;
+import org.apache.seatunnel.connectors.cdc.base.relational.connection.JdbcConnectionPoolFactory;
 
-import com.google.auto.service.AutoService;
+/** Factory to create {@link JdbcConnectionPoolFactory} for Postgre SQL. */
+public class PostgresPooledDataSourceFactory extends JdbcConnectionPoolFactory {
 
-@AutoService(JdbcDialectFactory.class)
-public class PostgresDialectFactory implements JdbcDialectFactory {
-    @Override
-    public boolean acceptsURL(String url) {
-        return url.startsWith("jdbc:postgresql:");
-    }
+    private static final String URL_PATTERN = "jdbc:postgresql://%s:%s/%s";
 
     @Override
-    public JdbcDialect create() {
-        return new PostgresDialect();
+    public String getJdbcUrl(JdbcSourceConfig sourceConfig) {
+        String hostName = sourceConfig.getHostname();
+        int port = sourceConfig.getPort();
+        String database = sourceConfig.getDatabaseList().get(0);
+        return String.format(URL_PATTERN, hostName, port, database);
     }
 }
