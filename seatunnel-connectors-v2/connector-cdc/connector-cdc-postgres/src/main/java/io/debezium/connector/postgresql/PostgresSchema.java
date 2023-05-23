@@ -1,7 +1,18 @@
 /*
- * Copyright Debezium Authors.
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
  *
- * Licensed under the Apache Software License version 2.0, available at http://www.apache.org/licenses/LICENSE-2.0
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 package io.debezium.connector.postgresql;
@@ -36,8 +47,6 @@ import java.util.Map;
  * information contains the {@link Tables table definitions} and the Kafka Connect {@link
  * #schemaFor(TableId) Schema}s for each table, where the {@link Schema} excludes any columns that
  * have been {@link PostgresConnectorConfig#COLUMN_EXCLUDE_LIST specified} in the configuration.
- *
- * @author Horia Chiorean
  */
 @NotThreadSafe
 public class PostgresSchema extends RelationalDatabaseSchema {
@@ -97,8 +106,8 @@ public class PostgresSchema extends RelationalDatabaseSchema {
      * @return this object so methods can be chained together; never null
      * @throws SQLException if there is a problem obtaining the schema from the database server
      */
-    protected PostgresSchema refresh(
-            PostgresConnection connection, boolean printReplicaIdentityInfo) throws SQLException {
+    public PostgresSchema refresh(PostgresConnection connection, boolean printReplicaIdentityInfo)
+            throws SQLException {
         // read all the information from the DB
         connection.readSchema(tables(), null, null, getTableFilter(), null, true);
         if (printReplicaIdentityInfo) {

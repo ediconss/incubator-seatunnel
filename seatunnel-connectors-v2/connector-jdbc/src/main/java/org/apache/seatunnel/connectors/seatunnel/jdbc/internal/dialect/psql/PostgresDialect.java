@@ -77,7 +77,7 @@ public class PostgresDialect implements JdbcDialect {
             Connection connection, String queryTemplate, int fetchSize) throws SQLException {
         // use cursor mode, reference:
         // https://jdbc.postgresql.org/documentation/query/#getting-results-based-on-a-cursor
-        connection.setAutoCommit(false);
+        connection.setAutoCommit(true);
         PreparedStatement statement =
                 connection.prepareStatement(
                         queryTemplate, ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY);

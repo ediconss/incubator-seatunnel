@@ -20,7 +20,12 @@ package org.apache.seatunnel.connectors.seatunnel.cdc.postgres.source;
 import org.apache.seatunnel.api.configuration.Option;
 import org.apache.seatunnel.api.configuration.ReadonlyConfig;
 import org.apache.seatunnel.api.source.SeaTunnelSource;
-import org.apache.seatunnel.api.table.type.SeaTunnelRowType;
+import org.apache.seatunnel.api.table.catalog.Catalog;
+import org.apache.seatunnel.api.table.catalog.CatalogOptions;
+import org.apache.seatunnel.api.table.catalog.CatalogTable;
+import org.apache.seatunnel.api.table.catalog.TablePath;
+import org.apache.seatunnel.api.table.type.SeaTunnelDataType;
+import org.apache.seatunnel.api.table.type.SeaTunnelRow;
 import org.apache.seatunnel.connectors.cdc.base.config.JdbcSourceConfig;
 import org.apache.seatunnel.connectors.cdc.base.config.SourceConfig;
 import org.apache.seatunnel.connectors.cdc.base.dialect.DataSourceDialect;
@@ -34,17 +39,17 @@ import org.apache.seatunnel.connectors.cdc.debezium.row.SeaTunnelRowDebeziumDese
 import org.apache.seatunnel.connectors.seatunnel.cdc.postgres.config.PostgresSourceConfig;
 import org.apache.seatunnel.connectors.seatunnel.cdc.postgres.config.PostgresSourceConfigFactory;
 import org.apache.seatunnel.connectors.seatunnel.cdc.postgres.source.offset.LsnOffsetFactory;
-import org.apache.seatunnel.connectors.seatunnel.cdc.postgres.utils.PostgresTypeUtils;
+import org.apache.seatunnel.connectors.seatunnel.jdbc.catalog.psql.PostgresCatalogFactory;
 
 import com.google.auto.service.AutoService;
 import io.debezium.connector.postgresql.PostgresConnectorConfig;
 import io.debezium.connector.postgresql.PostgresValueConverter;
 import io.debezium.connector.postgresql.connection.PostgresConnection;
-import io.debezium.relational.Table;
 import io.debezium.relational.TableId;
 
 import java.nio.charset.Charset;
 import java.time.ZoneId;
+import java.util.List;
 
 @AutoService(SeaTunnelSource.class)
 public class PostgresIncrementalSource<T> extends IncrementalSource<T, JdbcSourceConfig> {
@@ -80,8 +85,6 @@ public class PostgresIncrementalSource<T> extends IncrementalSource<T, JdbcSourc
             ReadonlyConfig config) {
         PostgresSourceConfig postgresSourceConfig =
                 (PostgresSourceConfig) this.configFactory.create(0);
-        TableId tableId =
-                this.dataSourceDialect.discoverDataCollections(postgresSourceConfig).get(0);
 
         PostgresConnectorConfig dbzConnectorConfig = postgresSourceConfig.getDbzConnectorConfig();
 
@@ -98,18 +101,48 @@ public class PostgresIncrementalSource<T> extends IncrementalSource<T, JdbcSourc
         PostgresConnection postgresConnection =
                 new PostgresConnection(dbzConnectorConfig.getJdbcConfig(), valueConverterBuilder);
 
-        Table table =
-                ((PostgresDialect) dataSourceDialect)
-                        .queryTableSchema(postgresConnection, tableId)
-                        .getTable();
+        List<TableId> discoverDataCollections =
+                this.dataSourceDialect.discoverDataCollections(postgresSourceConfig);
 
-        SeaTunnelRowType seaTunnelRowType = PostgresTypeUtils.convertFromTable(table);
+        //        Map<String, SeaTunnelRowType> tabelAndRowTypeMap =
+        //                new HashMap<>(discoverDataCollections.size());
+        //        for (TableId tableId : discoverDataCollections) {
+        //            Table table =
+        //                    ((PostgresDialect) dataSourceDialect)
+        //                            .queryTableSchema(postgresConnection, tableId)
+        //                            .getTable();
+        //            SeaTunnelRowType seaTunnelRowType = PostgresTypeUtils.convertFromTable(table);
+        //            tabelAndRowTypeMap.put(table.toString(), seaTunnelRowType);
+        //        }
+        //
+        //        MultipleRowType multipleRowType = new MultipleRowType(tabelAndRowTypeMap);
+
+        //        Table table =
+        //                ((PostgresDialect) dataSourceDialect)
+        //                        .queryTableSchema(postgresConnection,
+        // discoverDataCollections.get(0))
+        //                        .getTable();
+        //        SeaTunnelRowType seaTunnelRowType = PostgresTypeUtils.convertFromTable(table);
+
+        SeaTunnelDataType<SeaTunnelRow> physicalRowType;
+        if (dataType == null) {
+            // TODO: support metadata keys
+            try (Catalog catalog = new PostgresCatalogFactory().createCatalog("postgres", config)) {
+                catalog.open();
+                CatalogTable table =
+                        catalog.getTable(
+                                TablePath.of(config.get(CatalogOptions.TABLE_NAMES).get(0)));
+                physicalRowType = table.getTableSchema().toPhysicalRowDataType();
+            }
+        } else {
+            physicalRowType = dataType;
+        }
 
         String zoneId = config.get(JdbcSourceOptions.SERVER_TIME_ZONE);
         return (DebeziumDeserializationSchema<T>)
                 SeaTunnelRowDebeziumDeserializeSchema.builder()
-                        .setPhysicalRowType(seaTunnelRowType)
-                        .setResultTypeInfo(seaTunnelRowType)
+                        .setPhysicalRowType(physicalRowType)
+                        .setResultTypeInfo(physicalRowType)
                         .setServerTimeZone(ZoneId.of(zoneId))
                         .build();
     }

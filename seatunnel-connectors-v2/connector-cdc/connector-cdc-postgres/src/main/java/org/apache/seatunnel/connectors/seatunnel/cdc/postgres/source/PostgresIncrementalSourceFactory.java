@@ -20,6 +20,8 @@ package org.apache.seatunnel.connectors.seatunnel.cdc.postgres.source;
 import org.apache.seatunnel.api.configuration.util.OptionRule;
 import org.apache.seatunnel.api.source.SeaTunnelSource;
 import org.apache.seatunnel.api.table.factory.Factory;
+import org.apache.seatunnel.api.table.factory.SupportMultipleTable;
+import org.apache.seatunnel.api.table.factory.TableFactoryContext;
 import org.apache.seatunnel.api.table.factory.TableSourceFactory;
 import org.apache.seatunnel.connectors.cdc.base.option.JdbcSourceOptions;
 import org.apache.seatunnel.connectors.seatunnel.cdc.postgres.option.PostgresOptions;
@@ -27,8 +29,10 @@ import org.apache.seatunnel.connectors.seatunnel.jdbc.catalog.JdbcCatalogOptions
 
 import com.google.auto.service.AutoService;
 
+import java.util.Collections;
+
 @AutoService(Factory.class)
-public class PostgresIncrementalSourceFactory implements TableSourceFactory {
+public class PostgresIncrementalSourceFactory implements TableSourceFactory, SupportMultipleTable {
     @Override
     public String factoryIdentifier() {
         return PostgresIncrementalSource.IDENTIFIER;
@@ -57,5 +61,10 @@ public class PostgresIncrementalSourceFactory implements TableSourceFactory {
     @Override
     public Class<? extends SeaTunnelSource> getSourceClass() {
         return PostgresIncrementalSource.class;
+    }
+
+    @Override
+    public Result applyTables(TableFactoryContext context) {
+        return Result.of(context.getCatalogTables(), Collections.emptyList());
     }
 }

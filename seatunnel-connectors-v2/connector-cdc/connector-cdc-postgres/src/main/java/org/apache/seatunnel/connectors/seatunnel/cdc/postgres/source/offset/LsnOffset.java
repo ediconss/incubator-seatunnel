@@ -102,8 +102,6 @@ public class LsnOffset extends Offset {
             if (thisLsn.isValid()) {
                 return thatLsn.compareTo(thisLsn);
             }
-            return -1;
-        } else if (thisLsn.isValid()) {
             return 1;
         }
         return 0;

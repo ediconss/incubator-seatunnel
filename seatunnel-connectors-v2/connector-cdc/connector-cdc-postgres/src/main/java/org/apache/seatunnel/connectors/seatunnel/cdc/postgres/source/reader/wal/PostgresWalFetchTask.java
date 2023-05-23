@@ -22,13 +22,33 @@ import org.apache.seatunnel.connectors.cdc.base.source.split.IncrementalSplit;
 import org.apache.seatunnel.connectors.cdc.base.source.split.SourceSplitBase;
 import org.apache.seatunnel.connectors.seatunnel.cdc.postgres.source.reader.PostgresSourceFetchTaskContext;
 
+import org.apache.kafka.connect.errors.ConnectException;
+
+import io.debezium.DebeziumException;
+import io.debezium.connector.postgresql.PostgresConnectorConfig;
+import io.debezium.connector.postgresql.PostgresOffsetContext;
 import io.debezium.connector.postgresql.PostgresStreamingChangeEventSource;
+import io.debezium.connector.postgresql.PostgresTaskContext;
+import io.debezium.connector.postgresql.connection.PostgresConnection;
+import io.debezium.connector.postgresql.connection.ReplicationConnection;
+import io.debezium.connector.postgresql.snapshot.NeverSnapshotter;
+import io.debezium.connector.postgresql.spi.SlotCreationResult;
+import io.debezium.connector.postgresql.spi.SlotState;
 import io.debezium.pipeline.source.spi.ChangeEventSource;
 import io.debezium.util.Clock;
+import io.debezium.util.Metronome;
+import lombok.extern.slf4j.Slf4j;
 
+import java.sql.SQLException;
+import java.time.Duration;
+
+@Slf4j
 public class PostgresWalFetchTask implements FetchTask<SourceSplitBase> {
     private final IncrementalSplit split;
     private volatile boolean taskRunning = false;
+
+    private static final String CONTEXT_NAME = "postgres-cdc-connector-task";
+    private ReplicationConnection replicationConnection;
 
     public PostgresWalFetchTask(IncrementalSplit split) {
         this.split = split;
@@ -40,23 +60,108 @@ public class PostgresWalFetchTask implements FetchTask<SourceSplitBase> {
                 (PostgresSourceFetchTaskContext) context;
         taskRunning = true;
 
+        PostgresConnection dataConnection =
+                ((PostgresSourceFetchTaskContext) context).getDataConnection();
+        PostgresConnectorConfig connectorConfig =
+                ((PostgresSourceFetchTaskContext) context).getDbzConnectorConfig();
+        PostgresOffsetContext offsetContext =
+                ((PostgresSourceFetchTaskContext) context).getOffsetContext();
+
+        PostgresTaskContext taskContext =
+                ((PostgresSourceFetchTaskContext) context).getTaskContext();
+
+        NeverSnapshotter snapshotter = new NeverSnapshotter();
+        initReplicationSlot(
+                dataConnection, connectorConfig, offsetContext, taskContext, snapshotter);
+
         PostgresStreamingChangeEventSource streamingChangeEventSource =
                 new PostgresStreamingChangeEventSource(
                         sourceFetchContext.getDbzConnectorConfig(),
-                        sourceFetchContext.getSnapshotter(),
+                        snapshotter,
                         sourceFetchContext.getDataConnection(),
                         sourceFetchContext.getDispatcher(),
                         sourceFetchContext.getErrorHandler(),
                         Clock.SYSTEM,
                         sourceFetchContext.getDatabaseSchema(),
                         sourceFetchContext.getTaskContext(),
-                        sourceFetchContext.getReplicationConnection());
+                        replicationConnection);
 
         TransactionLogSplitChangeEventSourceContext changeEventSourceContext =
                 new TransactionLogSplitChangeEventSourceContext();
 
         streamingChangeEventSource.execute(
                 changeEventSourceContext, sourceFetchContext.getOffsetContext());
+    }
+
+    private void initReplicationSlot(
+            PostgresConnection dataConnection,
+            PostgresConnectorConfig connectorConfig,
+            PostgresOffsetContext offsetContext,
+            PostgresTaskContext taskContext,
+            NeverSnapshotter snapshotter) {
+        try {
+            // Print out the server information
+            SlotState slotInfo = null;
+            try {
+                if (log.isInfoEnabled()) {
+                    log.info(dataConnection.serverInfo().toString());
+                }
+                slotInfo =
+                        dataConnection.getReplicationSlotState(
+                                connectorConfig.slotName(),
+                                connectorConfig.plugin().getPostgresPluginName());
+            } catch (SQLException e) {
+                log.warn(
+                        "unable to load info of replication slot, Debezium will try to create the slot");
+            }
+
+            if (offsetContext == null) {
+                log.info("No previous offset found");
+                // if we have no initial offset, indicate that to Snapshotter by passing null
+                snapshotter.init(connectorConfig, null, slotInfo);
+            } else {
+                log.info("Found previous offset {}", offsetContext);
+                snapshotter.init(connectorConfig, offsetContext.asOffsetState(), slotInfo);
+            }
+
+            SlotCreationResult slotCreatedInfo = null;
+            if (snapshotter.shouldStream()) {
+                final boolean doSnapshot = snapshotter.shouldSnapshot();
+                this.replicationConnection =
+                        createReplicationConnection(
+                                taskContext,
+                                doSnapshot,
+                                connectorConfig.maxRetries(),
+                                connectorConfig.retryDelay());
+
+                // we need to create the slot before we start streaming if it doesn't exist
+                // otherwise we can't stream back changes happening while the snapshot is taking
+                // place
+                if (slotInfo == null) {
+                    try {
+                        slotCreatedInfo =
+                                replicationConnection.createReplicationSlot().orElse(null);
+                    } catch (SQLException ex) {
+                        String message = "Creation of replication slot failed";
+                        if (ex.getMessage().contains("already exists")) {
+                            message +=
+                                    "; when setting up multiple connectors for the same database host, please make sure to use a distinct replication slot name for each.";
+                        }
+                        throw new DebeziumException(message, ex);
+                    }
+                } else {
+                    slotCreatedInfo = null;
+                }
+            }
+
+            try {
+                dataConnection.commit();
+            } catch (SQLException e) {
+                throw new DebeziumException(e);
+            }
+        } catch (Exception e) {
+            throw new DebeziumException(e);
+        }
     }
 
     @Override
@@ -78,5 +183,109 @@ public class PostgresWalFetchTask implements FetchTask<SourceSplitBase> {
         public boolean isRunning() {
             return taskRunning;
         }
+    }
+    //
+    //    public static class PostgresWalSplitReadTask extends PostgresStreamingChangeEventSource {
+    //
+    //        private static final Logger LOG =
+    //                LoggerFactory.getLogger(PostgresWalSplitReadTask.class);
+    //        private final IncrementalSplit lsnSplit;
+    //        private final JdbcSourceEventDispatcher dispatcher;
+    //        private final ErrorHandler errorHandler;
+    //        private ChangeEventSourceContext context;
+    //
+    //        public PostgresWalSplitReadTask(PostgresConnectorConfig connectorConfig, Snapshotter
+    // snapshotter, PostgresConnection connection, JdbcSourceEventDispatcher dispatcher,
+    // ErrorHandler errorHandler, Clock clock, PostgresSchema schema, PostgresTaskContext
+    // taskContext, ReplicationConnection replicationConnection,IncrementalSplit binlogSplit) {
+    //            super(connectorConfig, snapshotter, connection, dispatcher, errorHandler, clock,
+    // schema, taskContext, replicationConnection);
+    //            this.lsnSplit = binlogSplit;
+    //            this.dispatcher = dispatcher;
+    //            this.errorHandler = errorHandler;
+    //        }
+    //
+    //
+    //        @Override
+    //        private void processMessages(ChangeEventSourceContext context, PostgresOffsetContext
+    // offsetContext, final ReplicationStream stream)
+    //                throws SQLException, InterruptedException {
+    //            if (isBoundedRead()) {
+    //                final LsnOffset currentRedoLogOffset =
+    // getLsnPosition(offsetContext.getOffset());
+    //                // reach the high watermark, the binlog fetcher should be finished
+    //                if (currentRedoLogOffset.isAtOrAfter(lsnSplit.getStopOffset())) {
+    //                    // send binlog end event
+    //                    try {
+    //                        dispatcher.dispatchWatermarkEvent(
+    //                                offsetContext.getPartition(),
+    //                                lsnSplit,
+    //                                currentRedoLogOffset,
+    //                                WatermarkKind.END);
+    //                    } catch (InterruptedException e) {
+    //                        LOG.error("Send signal event error.", e);
+    //                        errorHandler.setProducerThrowable(
+    //                                new DebeziumException("Error processing binlog signal event",
+    // e));
+    //                    }
+    //                    // tell fetcher the binlog task finished
+    //                    ((SqlServerSnapshotFetchTask.SnapshotBinlogSplitChangeEventSourceContext)
+    //                            context)
+    //                            .finished();
+    //                }
+    //            }
+    //        }
+    //
+    //        private boolean isBoundedRead() {
+    //            return !NO_STOPPING_OFFSET.equals(lsnSplit.getStopOffset());
+    //        }
+    //
+    //        @Override
+    //        public void execute(ChangeEventSourceContext context, SqlServerOffsetContext
+    // offsetContext)
+    //                throws InterruptedException {
+    //            this.context = context;
+    //            super.execute(context, offsetContext);
+    //        }
+
+    //    }
+
+    public ReplicationConnection createReplicationConnection(
+            PostgresTaskContext taskContext,
+            boolean doSnapshot,
+            int maxRetries,
+            Duration retryDelay)
+            throws ConnectException {
+        final Metronome metronome = Metronome.parker(retryDelay, Clock.SYSTEM);
+        short retryCount = 0;
+        ReplicationConnection replicationConnection = null;
+        while (retryCount <= maxRetries) {
+            try {
+                return taskContext.createReplicationConnection(doSnapshot);
+            } catch (SQLException ex) {
+                retryCount++;
+                if (retryCount > maxRetries) {
+                    log.error(
+                            "Too many errors connecting to server. All {} retries failed.",
+                            maxRetries);
+                    throw new ConnectException(ex);
+                }
+
+                log.warn(
+                        "Error connecting to server; will attempt retry {} of {} after {} "
+                                + "seconds. Exception message: {}",
+                        retryCount,
+                        maxRetries,
+                        retryDelay.getSeconds(),
+                        ex.getMessage());
+                try {
+                    metronome.pause();
+                } catch (InterruptedException e) {
+                    log.warn("Connection retry sleep interrupted by exception: " + e);
+                    Thread.currentThread().interrupt();
+                }
+            }
+        }
+        return replicationConnection;
     }
 }

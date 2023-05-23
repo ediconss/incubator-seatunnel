@@ -61,13 +61,18 @@ public class TableDiscoveryUtils {
                             + "and n.nspname !~ '^pg_toast';",
                     rs -> {
                         while (rs.next()) {
-                            TableId tableId = new TableId(null, rs.getString(1), rs.getString(2));
-                            if (tableFilters.dataCollectionFilter().isIncluded(tableId)) {
-                                capturedTableIds.add(tableId);
-                                LOG.info("\t including '{}' for further processing", tableId);
-                            } else {
-                                LOG.info("\t '{}' is filtered out of capturing", tableId);
-                            }
+                            TableId tableId =
+                                    new TableId(database, rs.getString(1), rs.getString(2));
+                            capturedTableIds.add(tableId);
+                            //                            if
+                            // (tableFilters.dataCollectionFilter().isIncluded(tableId)) {
+                            //                                capturedTableIds.add(tableId);
+                            //                                LOG.info("\t including '{}' for
+                            // further processing", tableId);
+                            //                            } else {
+                            //                                LOG.info("\t '{}' is filtered out of
+                            // capturing", tableId);
+                            //                            }
                         }
                     });
         } catch (SQLException e) {

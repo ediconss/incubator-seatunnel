@@ -297,7 +297,7 @@ public class PostgresUtils {
     private static PreparedStatement initStatement(JdbcConnection jdbc, String sql, int fetchSize)
             throws SQLException {
         final Connection connection = jdbc.connection();
-        connection.setAutoCommit(false);
+        connection.setAutoCommit(true);
         final PreparedStatement statement = connection.prepareStatement(sql);
         statement.setFetchSize(fetchSize);
         return statement;
