@@ -22,6 +22,7 @@ import org.apache.seatunnel.connectors.cdc.base.config.StartupConfig;
 import org.apache.seatunnel.connectors.cdc.base.config.StopConfig;
 
 import io.debezium.connector.postgresql.PostgresConnectorConfig;
+import io.debezium.relational.RelationalTableFilters;
 
 import java.util.List;
 import java.util.Properties;
@@ -78,5 +79,9 @@ public class PostgresSourceConfig extends JdbcSourceConfig {
     @Override
     public PostgresConnectorConfig getDbzConnectorConfig() {
         return new PostgresConnectorConfig(getDbzConfiguration());
+    }
+
+    public RelationalTableFilters getTableFilters() {
+        return getDbzConnectorConfig().getTableFilters();
     }
 }

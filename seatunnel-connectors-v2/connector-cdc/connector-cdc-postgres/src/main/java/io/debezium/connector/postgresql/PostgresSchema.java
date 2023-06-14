@@ -43,9 +43,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Change constructor to public, line 73
- *
- * <p>Component that records the schema information for the {@link PostgresConnector}. The schema
+ * Component that records the schema information for the {@link PostgresConnector}. The schema
  * information contains the {@link Tables table definitions} and the Kafka Connect {@link
  * #schemaFor(TableId) Schema}s for each table, where the {@link Schema} excludes any columns that
  * have been {@link PostgresConnectorConfig#COLUMN_EXCLUDE_LIST specified} in the configuration.
@@ -63,9 +61,7 @@ public class PostgresSchema extends RelationalDatabaseSchema {
     private final boolean readToastableColumns;
 
     /**
-     * change this to public
-     *
-     * <p>Create a schema component given the supplied {@link PostgresConnectorConfig Postgres
+     * Create a schema component given the supplied {@link PostgresConnectorConfig Postgres
      * connector configuration}.
      *
      * @param config the connector configuration, which is presumed to be valid
@@ -110,8 +106,8 @@ public class PostgresSchema extends RelationalDatabaseSchema {
      * @return this object so methods can be chained together; never null
      * @throws SQLException if there is a problem obtaining the schema from the database server
      */
-    public PostgresSchema refresh(PostgresConnection connection, boolean printReplicaIdentityInfo)
-            throws SQLException {
+    protected PostgresSchema refresh(
+            PostgresConnection connection, boolean printReplicaIdentityInfo) throws SQLException {
         // read all the information from the DB
         connection.readSchema(tables(), null, null, getTableFilter(), null, true);
         if (printReplicaIdentityInfo) {

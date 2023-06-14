@@ -32,6 +32,7 @@ import io.debezium.connector.postgresql.PostgresSchema;
 import io.debezium.connector.postgresql.connection.PostgresConnection;
 import io.debezium.pipeline.EventDispatcher;
 import io.debezium.pipeline.source.AbstractSnapshotChangeEventSource;
+import io.debezium.pipeline.source.spi.ChangeEventSource;
 import io.debezium.pipeline.source.spi.SnapshotProgressListener;
 import io.debezium.pipeline.spi.ChangeRecordEmitter;
 import io.debezium.pipeline.spi.OffsetContext;
@@ -89,7 +90,8 @@ public class PostgresSnapshotSplitReadTask extends AbstractSnapshotChangeEventSo
     }
 
     @Override
-    public SnapshotResult execute(ChangeEventSourceContext context, OffsetContext previousOffset)
+    public SnapshotResult execute(
+            ChangeEventSource.ChangeEventSourceContext context, OffsetContext previousOffset)
             throws InterruptedException {
         SnapshottingTask snapshottingTask = getSnapshottingTask(previousOffset);
         final SnapshotContext ctx;
@@ -111,12 +113,12 @@ public class PostgresSnapshotSplitReadTask extends AbstractSnapshotChangeEventSo
 
     @Override
     protected SnapshotResult doExecute(
-            ChangeEventSourceContext context,
+            ChangeEventSource.ChangeEventSourceContext context,
             OffsetContext previousOffset,
-            SnapshotContext snapshotContext,
-            SnapshottingTask snapshottingTask)
+            AbstractSnapshotChangeEventSource.SnapshotContext snapshotContext,
+            AbstractSnapshotChangeEventSource.SnapshottingTask snapshottingTask)
             throws Exception {
-        final PostgresSnapshotContext ctx = (PostgresSnapshotContext) snapshotContext;
+        final PostgreSqlSnapshotContext ctx = (PostgreSqlSnapshotContext) snapshotContext;
         ctx.offset = offsetContext;
 
         final LsnOffset lowWatermark = PostgresUtils.currentLsn(jdbcConnection);
@@ -143,29 +145,32 @@ public class PostgresSnapshotSplitReadTask extends AbstractSnapshotChangeEventSo
     }
 
     @Override
-    protected SnapshottingTask getSnapshottingTask(OffsetContext previousOffset) {
+    protected AbstractSnapshotChangeEventSource.SnapshottingTask getSnapshottingTask(
+            OffsetContext previousOffset) {
         return new SnapshottingTask(false, true);
     }
 
     @Override
-    protected SnapshotContext prepare(ChangeEventSourceContext changeEventSourceContext)
-            throws Exception {
-        return new PostgresSnapshotContext();
+    protected AbstractSnapshotChangeEventSource.SnapshotContext prepare(
+            ChangeEventSource.ChangeEventSourceContext changeEventSourceContext) throws Exception {
+        return new PostgreSqlSnapshotContext();
     }
 
-    private void createDataEvents(PostgresSnapshotContext snapshotContext, TableId tableId)
+    private void createDataEvents(PostgreSqlSnapshotContext snapshotContext, TableId tableId)
             throws Exception {
         EventDispatcher.SnapshotReceiver snapshotReceiver =
                 dispatcher.getSnapshotChangeEventReceiver();
         log.debug("Snapshotting table {}", tableId);
+        // todo pg 的 schema 不包含database
+        TableId newTableId = new TableId(null, tableId.schema(), tableId.table());
         createDataEventsForTable(
-                snapshotContext, snapshotReceiver, databaseSchema.tableFor(tableId));
+                snapshotContext, snapshotReceiver, databaseSchema.tableFor(newTableId));
         snapshotReceiver.completeSnapshot();
     }
 
     /** Dispatches the data change events for the records of a single table. */
     private void createDataEventsForTable(
-            PostgresSnapshotContext snapshotContext,
+            PostgreSqlSnapshotContext snapshotContext,
             EventDispatcher.SnapshotReceiver snapshotReceiver,
             Table table)
             throws InterruptedException {
@@ -191,8 +196,8 @@ public class PostgresSnapshotSplitReadTask extends AbstractSnapshotChangeEventSo
                                 selectSql,
                                 snapshotSplit.getSplitStart() == null,
                                 snapshotSplit.getSplitEnd() == null,
-                                new Object[] {snapshotSplit.getSplitStart()},
-                                new Object[] {snapshotSplit.getSplitEnd()},
+                                snapshotSplit.getSplitStart(),
+                                snapshotSplit.getSplitEnd(),
                                 snapshotSplit.getSplitKeyType().getTotalFields(),
                                 connectorConfig.getQueryFetchSize());
                 ResultSet rs = selectStatement.executeQuery()) {
@@ -234,7 +239,7 @@ public class PostgresSnapshotSplitReadTask extends AbstractSnapshotChangeEventSo
     }
 
     protected ChangeRecordEmitter getChangeRecordEmitter(
-            PostgresSnapshotContext snapshotContext, TableId tableId, Object[] row) {
+            PostgreSqlSnapshotContext snapshotContext, TableId tableId, Object[] row) {
         snapshotContext.offset.event(tableId, clock.currentTime());
         return new SnapshotChangeRecordEmitter(snapshotContext.offset, row, clock);
     }
@@ -254,10 +259,10 @@ public class PostgresSnapshotSplitReadTask extends AbstractSnapshotChangeEventSo
         }
     }
 
-    private static class PostgresSnapshotContext
+    private static class PostgreSqlSnapshotContext
             extends RelationalSnapshotChangeEventSource.RelationalSnapshotContext {
 
-        public PostgresSnapshotContext() throws SQLException {
+        public PostgreSqlSnapshotContext() throws SQLException {
             super("");
         }
     }

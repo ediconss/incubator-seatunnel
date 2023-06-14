@@ -26,6 +26,7 @@ import org.apache.kafka.common.config.ConfigValue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import io.debezium.config.CommonConnectorConfig;
 import io.debezium.config.ConfigDefinition;
 import io.debezium.config.Configuration;
 import io.debezium.config.EnumeratedValue;
@@ -58,11 +59,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-/**
- * Change get slotName, publicationName to public, line 1066
- *
- * <p>The configuration properties for the {@link PostgresConnector}
- */
+/** The configuration properties for the {@link PostgresConnector} */
 @SuppressWarnings({"InnerTypeLast", "MagicNumber", "MethodName", "RegexpSinglelineJava"})
 public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
 
@@ -1142,7 +1139,7 @@ public class PostgresConnectorConfig extends RelationalDatabaseConnectorConfig {
 
     @Override
     protected SourceInfoStructMaker<? extends AbstractSourceInfo> getSourceInfoStructMaker(
-            Version version) {
+            CommonConnectorConfig.Version version) {
         switch (version) {
             case V1:
                 return new LegacyV1PostgresSourceInfoStructMaker(

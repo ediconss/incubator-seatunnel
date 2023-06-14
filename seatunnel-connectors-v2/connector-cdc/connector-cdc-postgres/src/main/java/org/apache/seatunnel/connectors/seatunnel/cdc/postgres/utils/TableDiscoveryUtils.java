@@ -32,50 +32,59 @@ public class TableDiscoveryUtils {
     private static final Logger LOG = LoggerFactory.getLogger(TableDiscoveryUtils.class);
 
     @SuppressWarnings("MagicNumber")
-    public static List<TableId> listTables(
-            JdbcConnection jdbc, RelationalTableFilters tableFilters, String database)
+    public static List<TableId> listTables(JdbcConnection jdbc, RelationalTableFilters tableFilters)
             throws SQLException {
         final List<TableId> capturedTableIds = new ArrayList<>();
+        // -------------------
+        // READ DATABASE NAMES
+        // -------------------
+        // Get the list of databases ...
+        LOG.info("Read list of available databases");
+        final List<String> databaseNames = new ArrayList<>();
+
+        jdbc.query(
+                "select datname from pg_database",
+                rs -> {
+                    while (rs.next()) {
+                        databaseNames.add(rs.getString(1));
+                    }
+                });
+        LOG.info("\t list of available databases is: {}", databaseNames);
 
         // ----------------
         // READ TABLE NAMES
         // ----------------
         // Get the list of table IDs for each database. We can't use a prepared statement with
-        // Postgres, so we have to build the SQL statement each time. Although in other cases this
+        // SqlServer, so we have to build the SQL statement each time. Although in other cases this
         // might lead to SQL injection, in our case we are reading the database names from the
         // database and not taking them from the user ...
-        LOG.info("Read list of available tables in {}", database);
-        try {
-            jdbc.query(
-                    "select\n"
-                            + "n.nspname ,\n"
-                            + "c.relname\n"
-                            + "from\n"
-                            + "pg_catalog.pg_class c\n"
-                            + "left join pg_catalog.pg_namespace n on\n"
-                            + "n.oid = c.relnamespace\n"
-                            + "where\n"
-                            + "c.relkind = 'r'\n"
-                            + "and n.nspname <> 'pg_catalog'\n"
-                            + "and n.nspname <> 'information_schema'\n"
-                            + "and n.nspname !~ '^pg_toast';",
-                    rs -> {
-                        while (rs.next()) {
-                            TableId tableId = new TableId(null, rs.getString(1), rs.getString(2));
-                            if (tableFilters.dataCollectionFilter().isIncluded(tableId)) {
-                                capturedTableIds.add(tableId);
-                                LOG.info("\t including '{}' forfurther processing", tableId);
-                            } else {
-                                LOG.info("\t '{}' is filtered out ofcapturing", tableId);
+        LOG.info("Read list of available tables in each database");
+        for (String dbName : databaseNames) {
+            try {
+                jdbc.query(
+                        "SELECT * FROM \""
+                                + dbName
+                                + "\".INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE';",
+                        rs -> {
+                            while (rs.next()) {
+                                TableId tableId =
+                                        new TableId(
+                                                rs.getString(1), rs.getString(2), rs.getString(3));
+                                if (tableFilters.dataCollectionFilter().isIncluded(tableId)) {
+                                    capturedTableIds.add(tableId);
+                                    LOG.info("\t including '{}' for further processing", tableId);
+                                } else {
+                                    LOG.info("\t '{}' is filtered out of capturing", tableId);
+                                }
                             }
-                        }
-                    });
-        } catch (SQLException e) {
-            // We were unable to execute the query or process the results, so skip this ...
-            LOG.warn(
-                    "\t skipping database '{}' due to error reading tables: {}",
-                    database,
-                    e.getMessage());
+                        });
+            } catch (SQLException e) {
+                // We were unable to execute the query or process the results, so skip this ...
+                LOG.warn(
+                        "\t skipping database '{}' due to error reading tables: {}",
+                        dbName,
+                        e.getMessage());
+            }
         }
         return capturedTableIds;
     }

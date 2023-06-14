@@ -72,7 +72,10 @@ public class PostgresUtils {
             throws SQLException {
         // The statement used to get approximate row count which is less
         // accurate than COUNT(*), but is more efficient for large table.
-        final String rowCountQuery = String.format("SELECT COUNT(*) FROM %s;", tableId.table());
+        final String rowCountQuery =
+                String.format(
+                        "SELECT reltuples FROM pg_class r WHERE relkind = 'r' AND relname = '%s';",
+                        tableId.table());
         return jdbc.queryAndMap(
                 rowCountQuery,
                 rs -> {
@@ -146,14 +149,14 @@ public class PostgresUtils {
         String query =
                 String.format(
                         "SELECT MAX(%s) FROM ("
-                                + "SELECT TOP (%s) %s FROM %s WHERE %s >= ? ORDER BY %s ASC "
-                                + ") AS T",
+                                + "SELECT %s FROM %s WHERE %s >= ? ORDER BY %s ASC "
+                                + "LIMIT %s) AS T",
                         quotedColumn,
-                        chunkSize,
                         quotedColumn,
                         quote(tableId),
                         quotedColumn,
-                        quotedColumn);
+                        quotedColumn,
+                        chunkSize);
         return jdbc.prepareQueryAndMap(
                 query,
                 ps -> ps.setObject(1, includedLowerBound),
@@ -322,7 +325,7 @@ public class PostgresUtils {
     private static PreparedStatement initStatement(JdbcConnection jdbc, String sql, int fetchSize)
             throws SQLException {
         final Connection connection = jdbc.connection();
-        connection.setAutoCommit(true);
+        connection.setAutoCommit(false);
         final PreparedStatement statement = connection.prepareStatement(sql);
         statement.setFetchSize(fetchSize);
         return statement;
@@ -373,11 +376,11 @@ public class PostgresUtils {
     }
 
     public static String quote(String dbOrTableName) {
-        return dbOrTableName;
+        return "\"" + dbOrTableName + "\"";
     }
 
     public static String quote(TableId tableId) {
-        return tableId.schema() + "." + tableId.table();
+        return "\"" + tableId.schema() + "\".\"" + tableId.table() + "\"";
     }
 
     private static void addPrimaryKeyColumnsToCondition(

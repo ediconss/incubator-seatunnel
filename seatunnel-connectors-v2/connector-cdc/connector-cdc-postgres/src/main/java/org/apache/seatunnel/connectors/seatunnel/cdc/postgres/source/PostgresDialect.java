@@ -40,6 +40,7 @@ import io.debezium.connector.postgresql.PostgresConnectorConfig;
 import io.debezium.connector.postgresql.PostgresValueConverter;
 import io.debezium.connector.postgresql.connection.PostgresConnection;
 import io.debezium.jdbc.JdbcConnection;
+import io.debezium.relational.RelationalDatabaseConnectorConfig;
 import io.debezium.relational.TableId;
 import io.debezium.relational.history.TableChanges;
 
@@ -61,7 +62,7 @@ public class PostgresDialect implements JdbcDataSourceDialect {
 
     @Override
     public String getName() {
-        return "PostgreSQL";
+        return "Postgres";
     }
 
     @Override
@@ -73,20 +74,20 @@ public class PostgresDialect implements JdbcDataSourceDialect {
     @Override
     public JdbcConnection openJdbcConnection(JdbcSourceConfig sourceConfig) {
 
-        PostgresConnection tempPostgresConnection =
-                new PostgresConnection(sourceConfig.getDbzConnectorConfig().getJdbcConfig());
+        RelationalDatabaseConnectorConfig dbzConnectorConfig = sourceConfig.getDbzConnectorConfig();
 
-        final Charset databaseCharset = tempPostgresConnection.getDatabaseCharset();
+        PostgresConnection heartbeatConnection =
+                new PostgresConnection(dbzConnectorConfig.getJdbcConfig());
+        final Charset databaseCharset = heartbeatConnection.getDatabaseCharset();
 
         final PostgresConnection.PostgresValueConverterBuilder valueConverterBuilder =
                 (typeRegistry) ->
                         PostgresValueConverter.of(
-                                (PostgresConnectorConfig) sourceConfig.getDbzConnectorConfig(),
+                                (PostgresConnectorConfig) dbzConnectorConfig,
                                 databaseCharset,
                                 typeRegistry);
 
-        return new PostgresConnection(
-                sourceConfig.getDbzConnectorConfig().getJdbcConfig(), valueConverterBuilder);
+        return new PostgresConnection(dbzConnectorConfig.getJdbcConfig(), valueConverterBuilder);
     }
 
     @Override
@@ -104,9 +105,7 @@ public class PostgresDialect implements JdbcDataSourceDialect {
         PostgresSourceConfig postgresSourceConfig = (PostgresSourceConfig) sourceConfig;
         try (JdbcConnection jdbcConnection = openJdbcConnection(sourceConfig)) {
             return TableDiscoveryUtils.listTables(
-                    jdbcConnection,
-                    postgresSourceConfig.getDbzConnectorConfig().getTableFilters(),
-                    jdbcConnection.database());
+                    jdbcConnection, postgresSourceConfig.getTableFilters());
         } catch (SQLException e) {
             throw new SeaTunnelException("Error to discover tables: " + e.getMessage(), e);
         }
@@ -123,8 +122,23 @@ public class PostgresDialect implements JdbcDataSourceDialect {
     @Override
     public PostgresSourceFetchTaskContext createFetchTaskContext(
             SourceSplitBase sourceSplitBase, JdbcSourceConfig taskSourceConfig) {
+
+        RelationalDatabaseConnectorConfig dbzConnectorConfig =
+                taskSourceConfig.getDbzConnectorConfig();
+
+        PostgresConnection heartbeatConnection =
+                new PostgresConnection(dbzConnectorConfig.getJdbcConfig());
+        final Charset databaseCharset = heartbeatConnection.getDatabaseCharset();
+
+        final PostgresConnection.PostgresValueConverterBuilder valueConverterBuilder =
+                (typeRegistry) ->
+                        PostgresValueConverter.of(
+                                (PostgresConnectorConfig) dbzConnectorConfig,
+                                databaseCharset,
+                                typeRegistry);
+
         final PostgresConnection jdbcConnection =
-                (PostgresConnection) openJdbcConnection(taskSourceConfig);
+                new PostgresConnection(dbzConnectorConfig.getJdbcConfig(), valueConverterBuilder);
 
         List<TableChanges.TableChange> tableChangeList = new ArrayList<>();
         // TODO: support save table schema

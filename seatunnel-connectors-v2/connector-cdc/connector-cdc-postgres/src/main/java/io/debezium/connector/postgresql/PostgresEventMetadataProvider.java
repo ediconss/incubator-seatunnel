@@ -29,7 +29,6 @@ import io.debezium.util.Collect;
 import java.time.Instant;
 import java.util.Map;
 
-/** Fix DBZ-4329 bug, line 85 */
 public class PostgresEventMetadataProvider implements EventMetadataProvider {
 
     @Override
@@ -81,11 +80,6 @@ public class PostgresEventMetadataProvider implements EventMetadataProvider {
         if (source == null) {
             return null;
         }
-        Long txId = sourceInfo.getInt64(SourceInfo.TXID_KEY);
-        // https://issues.redhat.com/browse/DBZ-4329
-        if (txId == null) {
-            return null;
-        }
-        return Long.toString(txId);
+        return Long.toString(sourceInfo.getInt64(SourceInfo.TXID_KEY));
     }
 }

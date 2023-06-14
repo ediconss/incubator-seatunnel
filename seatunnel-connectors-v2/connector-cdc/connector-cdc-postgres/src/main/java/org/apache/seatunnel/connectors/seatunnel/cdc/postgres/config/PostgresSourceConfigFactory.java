@@ -19,13 +19,14 @@ package org.apache.seatunnel.connectors.seatunnel.cdc.postgres.config;
 
 import org.apache.seatunnel.api.configuration.ReadonlyConfig;
 import org.apache.seatunnel.connectors.cdc.base.config.JdbcSourceConfigFactory;
+import org.apache.seatunnel.connectors.cdc.debezium.EmbeddedDatabaseHistory;
 import org.apache.seatunnel.connectors.seatunnel.cdc.postgres.option.PostgresOptions;
 
 import io.debezium.connector.postgresql.PostgresConnector;
 
-import java.util.Arrays;
-import java.util.List;
 import java.util.Properties;
+import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
@@ -39,28 +40,11 @@ public class PostgresSourceConfigFactory extends JdbcSourceConfigFactory {
 
     private String slotName = PostgresOptions.SLOT_NAME.defaultValue();
 
-    private String publicationName = PostgresOptions.PUBLICATION_NAME.defaultValue();
-
-    protected List<String> schemaList;
-
-    public PostgresSourceConfigFactory schemaList(String... schemaList) {
-        this.schemaList = Arrays.asList(schemaList);
-        return this;
-    }
-
-    public PostgresSourceConfigFactory publicationName(String publicationName) {
-        this.publicationName = publicationName;
-        return this;
-    }
-
     @Override
     public JdbcSourceConfigFactory fromReadonlyConfig(ReadonlyConfig config) {
         super.fromReadonlyConfig(config);
         this.decodingPluginName = config.get(PostgresOptions.DECODING_PLUGIN_NAME);
         this.slotName = config.get(PostgresOptions.SLOT_NAME);
-        this.publicationName = config.get(PostgresOptions.PUBLICATION_NAME);
-        this.schemaList = config.get(PostgresOptions.SCHEMA_INCLUDE_LIST);
-        this.databaseList = Arrays.asList(config.get(PostgresOptions.DATABASE_NAME));
         return this;
     }
 
@@ -80,14 +64,21 @@ public class PostgresSourceConfigFactory extends JdbcSourceConfigFactory {
         props.setProperty("database.port", String.valueOf(port));
         props.setProperty("database.dbname", checkNotNull(databaseList.get(0)));
         props.setProperty("plugin.name", decodingPluginName);
-        props.setProperty("publication.name", publicationName);
         props.setProperty("slot.name", slotName);
 
-        if (schemaList != null) {
-            props.setProperty("schema.include.list", String.join(",", schemaList));
-        }
+        // database history
+        props.setProperty("database.history", EmbeddedDatabaseHistory.class.getCanonicalName());
+        props.setProperty("database.history.instance.name", UUID.randomUUID() + "_" + subtask);
+        props.setProperty("database.history.skip.unparseable.ddl", String.valueOf(true));
+        props.setProperty("database.history.refer.ddl", String.valueOf(true));
+
         if (tableList != null) {
-            props.setProperty("table.include.list", String.join(",", tableList));
+            // PostgreSQL identifier is of the form schemaName.tableName
+            String tableIncludeList =
+                    tableList.stream()
+                            .map(table -> table.substring(table.indexOf(".") + 1))
+                            .collect(Collectors.joining(","));
+            props.setProperty("table.include.list", tableIncludeList);
         }
 
         if (dbzProperties != null) {

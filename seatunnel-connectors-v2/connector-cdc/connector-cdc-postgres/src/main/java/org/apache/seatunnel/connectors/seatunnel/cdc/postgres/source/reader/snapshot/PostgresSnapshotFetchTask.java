@@ -25,7 +25,6 @@ import org.apache.seatunnel.connectors.cdc.base.source.split.SourceSplitBase;
 import org.apache.seatunnel.connectors.cdc.base.source.split.wartermark.WatermarkKind;
 import org.apache.seatunnel.connectors.seatunnel.cdc.postgres.source.reader.PostgresSourceFetchTaskContext;
 
-import io.debezium.pipeline.source.spi.ChangeEventSource;
 import io.debezium.pipeline.spi.SnapshotResult;
 
 import java.util.ArrayList;
@@ -45,7 +44,7 @@ public class PostgresSnapshotFetchTask implements FetchTask<SourceSplitBase> {
     }
 
     @Override
-    public void execute(Context context) throws Exception {
+    public void execute(FetchTask.Context context) throws Exception {
         PostgresSourceFetchTaskContext sourceFetchContext =
                 (PostgresSourceFetchTaskContext) context;
         taskRunning = true;
@@ -60,34 +59,38 @@ public class PostgresSnapshotFetchTask implements FetchTask<SourceSplitBase> {
                         split);
         SnapshotSplitChangeEventSourceContext changeEventSourceContext =
                 new SnapshotSplitChangeEventSourceContext();
-
         SnapshotResult snapshotResult =
                 snapshotSplitReadTask.execute(
                         changeEventSourceContext, sourceFetchContext.getOffsetContext());
 
-        final IncrementalSplit backfillWalSplit = createBackfillWalSplit(changeEventSourceContext);
+        final IncrementalSplit backfillBinlogSplit =
+                createBackFillWalSplit(changeEventSourceContext);
 
-        // optimization that skip the wal read when the low watermark equals high
+        // optimization that skip the binlog read when the low watermark equals high
         // watermark
-        final boolean walBackfillRequired =
-                backfillWalSplit.getStopOffset().isAfter(backfillWalSplit.getStartupOffset());
-        if (!walBackfillRequired) {
-            dispatchWalEndEvent(
-                    backfillWalSplit,
-                    sourceFetchContext.getOffsetContext().getPartition(),
-                    sourceFetchContext.getDispatcher());
+        final boolean binlogBackfillRequired =
+                backfillBinlogSplit.getStopOffset().isAfter(backfillBinlogSplit.getStartupOffset());
+        if (true) {
+            dispatchBinlogEndEvent(
+                    backfillBinlogSplit,
+                    ((PostgresSourceFetchTaskContext) context).getOffsetContext().getPartition(),
+                    ((PostgresSourceFetchTaskContext) context).getDispatcher());
             taskRunning = false;
             return;
         }
-
-        if (!snapshotResult.isCompletedOrSkipped()) {
-            taskRunning = false;
-            throw new IllegalStateException(
-                    String.format("Read snapshot for Postgres split %s fail", split));
-        }
     }
 
-    private void dispatchWalEndEvent(
+    private IncrementalSplit createBackFillWalSplit(
+            SnapshotSplitChangeEventSourceContext sourceContext) {
+        return new IncrementalSplit(
+                split.splitId(),
+                Collections.singletonList(split.getTableId()),
+                sourceContext.getLowWatermark(),
+                sourceContext.getHighWatermark(),
+                new ArrayList<>());
+    }
+
+    private void dispatchBinlogEndEvent(
             IncrementalSplit backFillBinlogSplit,
             Map<String, ?> sourcePartition,
             JdbcSourceEventDispatcher eventDispatcher)
@@ -99,43 +102,18 @@ public class PostgresSnapshotFetchTask implements FetchTask<SourceSplitBase> {
                 WatermarkKind.END);
     }
 
-    private IncrementalSplit createBackfillWalSplit(
-            SnapshotSplitChangeEventSourceContext sourceContext) {
-        return new IncrementalSplit(
-                split.splitId(),
-                Collections.singletonList(split.getTableId()),
-                sourceContext.getLowWatermark(),
-                sourceContext.getHighWatermark(),
-                new ArrayList<>());
-    }
-
     @Override
     public boolean isRunning() {
         return taskRunning;
     }
 
     @Override
-    public void shutdown() {}
+    public void shutdown() {
+        taskRunning = false;
+    }
 
     @Override
     public SourceSplitBase getSplit() {
         return split;
-    }
-
-    /**
-     * The {@link ChangeEventSource.ChangeEventSourceContext} implementation for bounded stream task
-     * of a snapshot split task.
-     */
-    public class SnapshotBinlogSplitChangeEventSourceContext
-            implements ChangeEventSource.ChangeEventSourceContext {
-
-        public void finished() {
-            taskRunning = false;
-        }
-
-        @Override
-        public boolean isRunning() {
-            return taskRunning;
-        }
     }
 }

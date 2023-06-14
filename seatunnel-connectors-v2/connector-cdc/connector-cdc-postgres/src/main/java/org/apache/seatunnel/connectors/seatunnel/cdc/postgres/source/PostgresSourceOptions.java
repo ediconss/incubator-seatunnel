@@ -19,6 +19,7 @@ package org.apache.seatunnel.connectors.seatunnel.cdc.postgres.source;
 
 import org.apache.seatunnel.api.configuration.Options;
 import org.apache.seatunnel.api.configuration.SingleChoiceOption;
+import org.apache.seatunnel.connectors.cdc.base.option.SourceOptions;
 import org.apache.seatunnel.connectors.cdc.base.option.StartupMode;
 import org.apache.seatunnel.connectors.cdc.base.option.StopMode;
 
@@ -27,7 +28,7 @@ import java.util.Arrays;
 public class PostgresSourceOptions {
     public static final SingleChoiceOption<StartupMode> STARTUP_MODE =
             (SingleChoiceOption)
-                    Options.key("startup.mode")
+                    Options.key(SourceOptions.STARTUP_MODE_KEY)
                             .singleChoice(
                                     StartupMode.class,
                                     Arrays.asList(
@@ -41,7 +42,7 @@ public class PostgresSourceOptions {
 
     public static final SingleChoiceOption<StopMode> STOP_MODE =
             (SingleChoiceOption)
-                    Options.key("stop.mode")
+                    Options.key(SourceOptions.STOP_MODE_KEY)
                             .singleChoice(StopMode.class, Arrays.asList(StopMode.NEVER))
                             .defaultValue(StopMode.NEVER)
                             .withDescription(

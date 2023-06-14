@@ -34,9 +34,7 @@ import java.sql.SQLException;
 import java.util.Collections;
 
 /**
- * change createReplicationConnection method protected to public, line 115
- *
- * <p>The context of a {@link PostgresConnectorTask}. This deals with most of the brunt of reading
+ * The context of a {@link PostgresConnectorTask}. This deals with most of the brunt of reading
  * various configuration options and creating other objects with these various options.
  */
 @ThreadSafe
@@ -79,7 +77,7 @@ public class PostgresTaskContext extends CdcSourceTaskContext {
         return config;
     }
 
-    protected void refreshSchema(PostgresConnection connection, boolean printReplicaIdentityInfo)
+    public void refreshSchema(PostgresConnection connection, boolean printReplicaIdentityInfo)
             throws SQLException {
         schema.refresh(connection, printReplicaIdentityInfo);
     }
@@ -111,7 +109,6 @@ public class PostgresTaskContext extends CdcSourceTaskContext {
                 config.slotName(), config.plugin().getPostgresPluginName());
     }
 
-    // change protected to public
     public ReplicationConnection createReplicationConnection(boolean doSnapshot)
             throws SQLException {
         final boolean dropSlotOnStop = config.dropSlotOnStop();

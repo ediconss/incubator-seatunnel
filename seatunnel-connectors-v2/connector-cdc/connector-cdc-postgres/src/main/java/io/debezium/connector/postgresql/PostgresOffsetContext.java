@@ -14,6 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package io.debezium.connector.postgresql;
 
 import org.apache.kafka.connect.data.Schema;
@@ -235,28 +236,36 @@ public class PostgresOffsetContext implements OffsetContext {
             return Collections.singletonMap(SERVER_PARTITION_KEY, connectorConfig.getLogicalName());
         }
 
-        private Long readOptionalLong(Map<String, ?> offset, String key) {
-            final Object obj = offset.get(key);
-            return (obj == null) ? null : ((Number) obj).longValue();
+        private Long longOffsetValue(Map<String, ?> values, String key) {
+            Object obj = values.get(key);
+            if (obj == null) {
+                return null;
+            }
+            if (obj instanceof Number) {
+                return ((Number) obj).longValue();
+            }
+            try {
+                return Long.parseLong(obj.toString());
+            } catch (NumberFormatException ne) {
+                return Lsn.valueOf((String) obj).asLong();
+            }
         }
 
+        @SuppressWarnings("unchecked")
         @Override
         public PostgresOffsetContext load(Map<String, ?> offset) {
-            final Lsn lsn = Lsn.valueOf(offset.get(SourceInfo.LSN_KEY).toString());
+            final Lsn lsn = Lsn.valueOf(longOffsetValue(offset, SourceInfo.LSN_KEY));
             final Lsn lastCompletelyProcessedLsn =
-                    Lsn.valueOf(readOptionalLong(offset, LAST_COMPLETELY_PROCESSED_LSN_KEY));
+                    Lsn.valueOf(longOffsetValue(offset, LAST_COMPLETELY_PROCESSED_LSN_KEY));
             final Lsn lastCommitLsn =
-                    Lsn.valueOf(readOptionalLong(offset, LAST_COMPLETELY_PROCESSED_LSN_KEY));
-            final Long txId = readOptionalLong(offset, SourceInfo.TXID_KEY);
+                    Lsn.valueOf(longOffsetValue(offset, LAST_COMPLETELY_PROCESSED_LSN_KEY));
+            final Long txId = longOffsetValue(offset, SourceInfo.TXID_KEY);
 
-            Long usecondsValue = (Long) offset.get(SourceInfo.TIMESTAMP_USEC_KEY);
-            Instant useconds = null;
-            if (usecondsValue != null) {
-                useconds = Conversions.toInstantFromMicros(usecondsValue);
-            } else {
-                useconds = Clock.system().currentTime();
-            }
-
+            final Instant useconds =
+                    offset.get(SourceInfo.TIMESTAMP_USEC_KEY) != null
+                            ? Conversions.toInstantFromMicros(
+                                    (Long) offset.get(SourceInfo.TIMESTAMP_USEC_KEY))
+                            : Clock.system().currentTimeAsInstant();
             final boolean snapshot =
                     (boolean)
                             ((Map<String, Object>) offset)

@@ -52,6 +52,10 @@ public class PostgresSchema {
     }
 
     private TableChanges.TableChange readTableSchema(JdbcConnection jdbc, TableId tableId) {
+
+        // Because the catalog is null in the postgresConnection.readSchema method
+        tableId = new TableId(null, tableId.schema(), tableId.table());
+
         PostgresConnection postgresConnection = (PostgresConnection) jdbc;
         Set<TableId> tableIdSet = new HashSet<>();
         tableIdSet.add(tableId);
