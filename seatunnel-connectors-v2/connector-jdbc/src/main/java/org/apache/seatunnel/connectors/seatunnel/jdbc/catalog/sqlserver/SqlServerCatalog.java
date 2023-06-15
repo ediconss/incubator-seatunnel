@@ -63,7 +63,7 @@ public class SqlServerCatalog extends AbstractJdbcCatalog {
 
     public SqlServerCatalog(
             String catalogName, String username, String pwd, JdbcUrlUtil.UrlInfo urlInfo) {
-        super(catalogName, username, pwd, urlInfo);
+        super(catalogName, username, pwd, urlInfo, "");
     }
 
     @Override

@@ -57,7 +57,7 @@ public class PostgresCDCIT extends TestSuiteBase implements TestResource {
     private static final String postgres_HOST = "postgres_cdc_e2e";
     private static final String postgres_USER_NAME = "postgres";
     private static final String postgres_USER_PASSWORD = "123456";
-    private static final String postgres_DATABASE = "postgres";
+    private static final String postgres_DATABASE = "cdc_e2e";
     private static final PostgreSQLContainer postgres_CONTAINER = createpostgresContainer();
 
     // postgres source table query sql

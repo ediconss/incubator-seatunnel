@@ -68,7 +68,7 @@ public class MySqlCatalog extends AbstractJdbcCatalog {
 
     public MySqlCatalog(
             String catalogName, String username, String pwd, JdbcUrlUtil.UrlInfo urlInfo) {
-        super(catalogName, username, pwd, urlInfo);
+        super(catalogName, username, pwd, urlInfo, "");
         this.connectionMap = new ConcurrentHashMap<>();
     }
 

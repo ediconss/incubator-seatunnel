@@ -14,8 +14,8 @@
 -- See the License for the specific language governing permissions and
 -- limitations under the License.
 
- 
-CREATE TABLE IF NOT EXISTS postgres_cdc_e2e_source_table (
+
+CREATE TABLE IF NOT EXISTS public.postgres_cdc_e2e_source_table (
    gid SERIAL PRIMARY KEY,
    text_col TEXT,
    varchar_col VARCHAR(255),
@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS postgres_cdc_e2e_source_table (
 
 alter table public.postgres_cdc_e2e_source_table REPLICA IDENTITY FULL;
 
-CREATE TABLE IF NOT EXISTS postgres_cdc_e2e_sink_table (
+CREATE TABLE IF NOT EXISTS public.postgres_cdc_e2e_sink_table (
    gid SERIAL PRIMARY KEY,
    text_col TEXT,
    varchar_col VARCHAR(255),
