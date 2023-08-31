@@ -17,12 +17,12 @@
 
 package org.apache.seatunnel.e2e.connector.cdc.postgres;
 
-import lombok.extern.slf4j.Slf4j;
 import org.apache.seatunnel.e2e.common.TestResource;
 import org.apache.seatunnel.e2e.common.TestSuiteBase;
 import org.apache.seatunnel.e2e.common.container.EngineType;
 import org.apache.seatunnel.e2e.common.container.TestContainer;
 import org.apache.seatunnel.e2e.common.junit.DisabledOnContainer;
+
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -30,6 +30,8 @@ import org.junit.jupiter.api.TestTemplate;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.utility.MountableFile;
+
+import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
 import java.sql.Connection;
@@ -50,7 +52,6 @@ import static org.awaitility.Awaitility.await;
         type = {EngineType.SPARK, EngineType.FLINK},
         disabledReason = "Currently SPARK and FLINK do not support cdc")
 public class PostgresCDCIT extends TestSuiteBase implements TestResource {
-
     // postgres
     private static final String postgres_HOST = "postgres_cdc_e2e";
     private static final String postgres_USER_NAME = "postgres";
